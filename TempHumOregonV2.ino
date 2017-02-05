@@ -8,27 +8,82 @@
 // serial debug
 #define DEBUG 0
 
+#include <Arduino.h>
+#include <EEPROM.h>
 #include <Wire.h>
 #include "OregonV2Sender.h"
 #include "SparkFunHTU21D.h"
 #include "LowPower.h"
 
-byte txPin = 4; // digital pin connected to the RF transmitter
-byte ledPin = 13; // digital pin for LED
-byte sensorId = 0xBB;
-byte channel = 0x10;
+uint8_t txPin = 4; // digital pin connected to the RF transmitter
+uint8_t ledPin = 13; // digital pin for LED
 
 HTU21D htu;
 OregonV2Sender sender;
 
+typedef struct {
+   uint8_t sensorId;
+   uint8_t channel;
+} sensorConf;
+
 void setup()
 {
+  sensorConf cfg;
+  uint16_t crcRead;
+  uint16_t crcComputed;
+
 #if DEBUG
   Serial.begin(9600);
   Serial.println("Setup");
 #endif
 
-  sender.setup(txPin, channel, sensorId, true);
+  // read config from eeprom
+  EEPROM.get(0, cfg);
+
+  // read CRC
+  EEPROM.get(sizeof(sensorConf), crcRead);
+
+  // check CRC
+  crcComputed = crc16((char*)&cfg, sizeof(sensorConf));
+
+#if DEBUG
+    Serial.print("CRC read=");
+    Serial.print(crcRead);
+    Serial.print(", CRC computed=");
+    Serial.println(crcComputed);
+#endif
+
+  if (crcComputed != crcRead)
+  {
+    randomSeed(analogRead(0));
+    cfg.sensorId = random (0x0, 0xFF);
+    cfg.channel = 1;
+
+    // write config to eeprom
+    EEPROM.put(0, cfg);
+
+    // write crc to eeprom
+    crcComputed = crc16((char*)&cfg, sizeof(sensorConf));
+    EEPROM.put(sizeof(sensorConf), crcComputed);
+
+#if DEBUG
+    Serial.print("Write to EEPROM, Sensor Id=");
+    Serial.print(cfg.sensorId);
+    Serial.print(", channel=");
+    Serial.println(cfg.channel);
+#endif
+  }
+  else
+  {
+#if DEBUG
+    Serial.print("Read from EEPROM, Sensor Id=");
+    Serial.print(cfg.sensorId);
+    Serial.print(", channel=");
+    Serial.println(cfg.channel);
+#endif
+  }
+
+  sender.setup(txPin, cfg.channel, cfg.sensorId, true);
   pinMode(ledPin, OUTPUT);
   htu.begin();
 }
@@ -37,6 +92,7 @@ void loop()
 {
   float humd = htu.readHumidity();
   float temp = htu.readTemperature();
+  long volt = readVcc();
 
 #if DEBUG
   Serial.print("Temp: ");
@@ -44,12 +100,14 @@ void loop()
   Serial.print("C, Hum: ");
   Serial.print(humd);
   Serial.print("%, Batt: ");
-  Serial.print(readVcc() / 1000.0);
+  Serial.print(volt / 1000.0);
   Serial.println("V");
 #endif
 
   // send the data
-  sender.send((byte)humd, temp, true);
+  // 2*0.9V is low battery
+  
+  sender.send((byte)humd, temp, (volt > 1800));
 
   blinkLed();
 
@@ -93,4 +151,19 @@ long readVcc()
   result = 1125300L / result; // Calculate Vcc (in mV); 1125300 = 1.1*1023*1000
   return result; // Vcc in millivolts
 }
+
+unsigned short crc16(char *msg, size_t size) {
+  int i = 0;
+  unsigned short crc = 0xffffU;
+
+  while(size--)
+  {
+    crc ^= (unsigned short) *msg++ << 8;
+
+    for(i = 0; i < 8; ++i)
+      crc = crc << 1 ^ (crc & 0x8000U ? 0x1021U : 0U);
+  }
+  return(crc & 0xffffU);
+}
+
 
