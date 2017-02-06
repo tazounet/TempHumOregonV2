@@ -15,8 +15,8 @@
 #include "SparkFunHTU21D.h"
 #include "LowPower.h"
 
-uint8_t txPin = 4; // digital pin connected to the RF transmitter
-uint8_t ledPin = 13; // digital pin for LED
+const uint8_t txPin = 4; // digital pin connected to the RF transmitter
+const uint8_t ledPin = 13; // digital pin for LED
 
 HTU21D htu;
 OregonV2Sender sender;
