@@ -1,4 +1,4 @@
-// Emulate the WT450 temperature and humidity sensor using a HTU21
+// Emulate the THGR2228N temperature and humidity sensor using a HTU21
 
 // rf433 lib: https://github.com/tazounet/OregonV2Sender
 // sensor lib: https://github.com/tazounet/SparkFun_HTU21D_Breakout_Arduino_Library
